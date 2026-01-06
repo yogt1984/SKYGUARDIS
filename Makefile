@@ -17,6 +17,11 @@ EMULATOR_LOG := $(LOG_DIR)/emulator.log
 CMAKE_FLAGS := -DCMAKE_BUILD_TYPE=Release
 ADA_FLAGS := -P skyguardis.gpr
 
+# Check for required tools
+CHECK_CMAKE := $(shell which cmake 2>/dev/null)
+CHECK_GNAT := $(shell which gnatmake 2>/dev/null)
+CHECK_GCC := $(shell which g++ 2>/dev/null)
+
 help:
 	@echo "SKYGUARDIS Makefile"
 	@echo ""
@@ -35,35 +40,104 @@ setup-dirs:
 	@mkdir -p $(ADA_BUILD)
 	@mkdir -p $(LOG_DIR)
 
-# Build C++ components using CMake
-build-cpp: setup-dirs
+# Check dependencies
+check-deps:
+	@echo "Checking dependencies..."
+	@if [ -z "$(CHECK_GCC)" ]; then \
+		echo "ERROR: g++ not found. Please install g++"; \
+		exit 1; \
+	fi
+	@if [ -z "$(CHECK_CMAKE)" ]; then \
+		echo "WARNING: cmake not found. Building C++ directly with g++..."; \
+		echo "  (Install cmake for better build management: sudo apt-get install cmake)"; \
+	fi
+	@if [ -z "$(CHECK_GNAT)" ]; then \
+		echo "WARNING: gnatmake not found. Ada components will not build."; \
+		echo "  (Install GNAT: sudo apt-get install gnat)"; \
+	fi
+	@echo "Dependency check complete"
+
+# Build C++ components - try CMake first, fallback to direct g++ build
+build-cpp: setup-dirs check-deps
 	@echo "Building C++ components..."
-	@cd $(BUILD_DIR) && cmake $(CMAKE_FLAGS) ..
-	@cd $(BUILD_DIR) && $(MAKE) -j$$(nproc)
+	@if [ -n "$(CHECK_CMAKE)" ]; then \
+		echo "Using CMake..."; \
+		cd $(BUILD_DIR) && cmake $(CMAKE_FLAGS) .. && \
+		cd $(BUILD_DIR) && $(MAKE) -j$$(nproc); \
+	else \
+		echo "Building directly with g++..."; \
+		$(MAKE) build-cpp-direct; \
+	fi
 	@echo "C++ build complete"
 
+# Direct C++ build (fallback when CMake is not available)
+build-cpp-direct: setup-dirs
+	@echo "Building C++ components directly..."
+	@mkdir -p $(BIN_DIR)
+	@g++ -std=c++17 -I./include/cpp -O2 -Wall \
+		src/cpp/main_c2_node.cpp \
+		src/cpp/c2_controller/c2_controller.cpp \
+		src/cpp/c2_controller/threat_evaluator.cpp \
+		src/cpp/radar_simulator/radar_simulator.cpp \
+		src/cpp/message_gateway/message_gateway.cpp \
+		src/cpp/message_gateway/protocol.cpp \
+		src/cpp/logger/logger.cpp \
+		src/cpp/logger/visualizer.cpp \
+		-o $(C2_NODE) -pthread || \
+		(echo "ERROR: C++ build failed. Check your source files." && exit 1)
+	@g++ -std=c++17 -I./include/cpp -O2 -Wall \
+		src/cpp/main_radar_sim.cpp \
+		src/cpp/radar_simulator/radar_simulator.cpp \
+		-o $(RADAR_SIM) || true
+	@echo "Direct C++ build complete"
+
 # Build Ada components using GNAT
-build-ada: setup-dirs
+build-ada: setup-dirs check-deps
+	@if [ -z "$(CHECK_GNAT)" ]; then \
+		echo "ERROR: gnatmake not found. Cannot build Ada components."; \
+		echo "  Install GNAT: sudo apt-get install gnat"; \
+		exit 1; \
+	fi
 	@echo "Building Ada components..."
 	@gnatmake $(ADA_FLAGS) -q || (echo "Ada build failed" && exit 1)
 	@echo "Ada build complete"
 
-# Build everything
-build: build-cpp build-ada
-	@echo "All components built successfully"
+# Build everything (Ada optional)
+build: build-cpp
+	@if [ -n "$(CHECK_GNAT)" ]; then \
+		$(MAKE) build-ada || echo "Ada build skipped"; \
+	else \
+		echo "Skipping Ada build (gnatmake not available)"; \
+	fi
+	@echo "Build complete"
 
 # Run C++ tests
 test-cpp: build-cpp
 	@echo "Running C++ tests..."
-	@cd $(BUILD_DIR) && ctest --output-on-failure || true
+	@if [ -n "$(CHECK_CMAKE)" ] && [ -f $(BUILD_DIR)/Makefile ]; then \
+		cd $(BUILD_DIR) && ctest --output-on-failure || true; \
+	else \
+		echo "Running direct tests..."; \
+		g++ -std=c++17 -I./include/cpp -O2 -Wall \
+			tests/cpp/test_threat_evaluator.cpp \
+			src/cpp/c2_controller/threat_evaluator.cpp \
+			-o $(BIN_DIR)/test_threat_evaluator && \
+		$(BIN_DIR)/test_threat_evaluator || true; \
+	fi
 
 # Run Ada tests
-test-ada: build-ada
-	@echo "Running Ada tests..."
-	@if [ -f $(BIN_DIR)/test_ballistics ]; then \
-		$(BIN_DIR)/test_ballistics || true; \
+test-ada:
+	@if [ -z "$(CHECK_GNAT)" ]; then \
+		echo "Skipping Ada tests (gnatmake not available)"; \
+	elif [ -f $(GUN_CONTROL) ]; then \
+		echo "Running Ada tests..."; \
+		if [ -f $(BIN_DIR)/test_ballistics ]; then \
+			$(BIN_DIR)/test_ballistics || true; \
+		else \
+			echo "Ada tests not yet implemented"; \
+		fi; \
 	else \
-		echo "Ada tests not yet implemented"; \
+		echo "Skipping Ada tests (Ada components not built)"; \
 	fi
 
 # Run all tests
@@ -81,8 +155,12 @@ emulator: build
 	@echo "" | tee -a $(EMULATOR_LOG)
 	@trap 'echo ""; echo "=== Emulator Stopped at $$(date) ===" | tee -a $(EMULATOR_LOG); pkill -P $$(pgrep -f "c2_node\|main_gun_control") 2>/dev/null || true; exit 0' INT TERM; \
 	($(C2_NODE) 2>&1 | tee -a $(EMULATOR_LOG) &) && \
-	sleep 0.5 && \
-	($(GUN_CONTROL) 2>&1 | tee -a $(EMULATOR_LOG) &) && \
+	if [ -f $(GUN_CONTROL) ]; then \
+		sleep 0.5 && \
+		($(GUN_CONTROL) 2>&1 | tee -a $(EMULATOR_LOG) &); \
+	else \
+		echo "[WARNING] Gun control not available (Ada not built)" | tee -a $(EMULATOR_LOG); \
+	fi && \
 	wait
 
 # Default target: build and run emulator

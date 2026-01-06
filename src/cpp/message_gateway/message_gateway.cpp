@@ -1,17 +1,19 @@
-#include "message_gateway/protocol.hpp"
 #include "message_gateway/message_gateway.hpp"
+#include "message_gateway/protocol.hpp"
 
 namespace skyguardis {
 namespace gateway {
 
-class MessageGateway {
-public:
-    void sendTargetAssignment(const protocol::TargetAssignment& assignment);
-    protocol::EngagementStatus receiveEngagementStatus();
+void MessageGateway::sendTargetAssignment(const protocol::TargetAssignment& assignment) {
+    // Placeholder: In real implementation, would serialize and send via UDP/IPC
+    (void)assignment;  // Suppress unused parameter warning
+}
 
-private:
-    // UDP/IPC implementation
-};
+protocol::EngagementStatus MessageGateway::receiveEngagementStatus() {
+    // Placeholder: In real implementation, would receive and deserialize from UDP/IPC
+    protocol::EngagementStatus status = {};
+    return status;
+}
 
 } // namespace gateway
 } // namespace skyguardis

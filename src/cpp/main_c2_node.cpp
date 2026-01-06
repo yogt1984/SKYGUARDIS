@@ -23,8 +23,8 @@ int main() {
     // Initialize components
     skyguardis::radar::RadarSimulator radar;
     skyguardis::c2::C2Controller c2;
-    skyguardis::gateway::MessageGateway gateway;
     skyguardis::logger::Logger logger;
+    // skyguardis::gateway::MessageGateway gateway;  // Reserved for future use
     
     logger.log("C2 Node initialized");
     

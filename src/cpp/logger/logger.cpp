@@ -1,4 +1,5 @@
 #include "logger/logger.hpp"
+#include "message_gateway/protocol.hpp"
 #include <iostream>
 #include <fstream>
 
