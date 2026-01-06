@@ -1,0 +1,14 @@
+build/
+*.o
+*.ali
+*.o
+*.exe
+*.dll
+*.so
+*.a
+*.log
+.DS_Store
+*.swp
+*.swo
+*~
+
