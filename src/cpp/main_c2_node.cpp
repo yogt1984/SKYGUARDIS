@@ -3,9 +3,22 @@
 #include "message_gateway/message_gateway.hpp"
 #include "logger/logger.hpp"
 #include <iostream>
+#include <chrono>
+#include <thread>
+#include <csignal>
+#include <atomic>
+
+std::atomic<bool> running(true);
+
+void signalHandler(int signal) {
+    running = false;
+}
 
 int main() {
-    std::cout << "SKYGUARDIS C2 Node starting..." << std::endl;
+    std::signal(SIGINT, signalHandler);
+    std::signal(SIGTERM, signalHandler);
+    
+    std::cout << "[C2_NODE] SKYGUARDIS C2 Node starting..." << std::endl;
     
     // Initialize components
     skyguardis::radar::RadarSimulator radar;
@@ -13,9 +26,31 @@ int main() {
     skyguardis::gateway::MessageGateway gateway;
     skyguardis::logger::Logger logger;
     
-    // Main control loop would go here
     logger.log("C2 Node initialized");
     
+    // Main control loop
+    int cycle = 0;
+    while (running) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
+        // Generate and process tracks
+        radar.generateTracks();
+        auto tracks = radar.getCurrentTracks();
+        
+        if (!tracks.empty()) {
+            c2.processTracks(tracks);
+            logger.log("Cycle " + std::to_string(cycle) + ": Processed " + 
+                      std::to_string(tracks.size()) + " tracks");
+        }
+        
+        cycle++;
+        if (cycle % 100 == 0) {
+            logger.log("C2 Node running - cycle " + std::to_string(cycle));
+        }
+    }
+    
+    logger.log("C2 Node shutting down");
+    std::cout << "[C2_NODE] Shutdown complete" << std::endl;
     return 0;
 }
 
