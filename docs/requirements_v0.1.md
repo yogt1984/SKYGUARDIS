@@ -254,7 +254,10 @@ The system shall support multiple stop mechanisms:
 - **Radar Update Rate**: 10 Hz (100ms period) - hard requirement
 - **C2 Processing**: < 50ms per cycle
 - **Ada Control Loop**: 10 Hz (100ms period) - deterministic
-- **Message Latency**: < 10ms for UDP communication
+- **EtherCAT Frame Latency**: < 10 microseconds (hard real-time requirement)
+- **EtherCAT Cycle Time**: < 1 millisecond (microsecond-level)
+- **EtherCAT Synchronization Jitter**: < 100 nanoseconds (nanosecond-level)
+- **Note**: Current UDP emulation achieves ~1-10ms latency (acceptable for development)
 
 #### 6.2.2 Determinism
 - **Ada Execution**: Deterministic timing (no dynamic allocation in hot path)
@@ -282,10 +285,12 @@ Object (Cartesian)
 
 ```
 C2 Target Assignment
-  → Message Serialization
-  → UDP Transmission
-  → Gun Control Reception
-  → Message Deserialization
+  → Datagram Serialization
+  → EtherCAT Frame Construction
+  → Frame Transmission (EtherCAT network, emulated via UDP)
+  → Gun Control Frame Reception
+  → Frame Parsing & Datagram Extraction
+  → Datagram Deserialization
   → Safety Validation (Ada)
   → State Machine Update
   → Engagement Execution
@@ -295,9 +300,12 @@ C2 Target Assignment
 
 ```
 Engagement Status
-  → Status Serialization
-  → UDP Transmission
-  → C2 Reception
+  → Status Datagram Serialization
+  → EtherCAT Frame Construction
+  → Frame Transmission (EtherCAT network, emulated via UDP)
+  → C2 Frame Reception
+  → Frame Parsing & Datagram Extraction
+  → Datagram Deserialization
   → Status Update
   → Logging/Visualization
 ```
@@ -309,12 +317,33 @@ Engagement Status
 ### 8.1 Communication Protocol
 
 #### 8.1.1 Transport Layer
-- **Protocol**: UDP (User Datagram Protocol)
-- **Address**: Localhost (127.0.0.1) for development
-- **Ports**: 
-  - C2 → Gun Control: Port 8888 (target assignments)
-  - Gun Control → C2: Port 8889 (engagement status)
+- **Protocol**: **EtherCAT (Ethernet for Control Automation Technology)**
+- **Physical Layer**: Ethernet (IEEE 802.3)
+- **Network Stack**: Bypasses TCP/IP completely
+- **Frame Embedding**: Real-time datagrams embedded directly in Ethernet frames
+- **Addressing**: 
+  - C2 → Gun Control: EtherCAT node address (emulated as localhost:8888 in development)
+  - Gun Control → C2: EtherCAT node address (emulated as localhost:8889 in development)
 - **Reliability**: Application-level acknowledgment for critical messages
+
+#### 8.1.1.1 EtherCAT Protocol Rationale
+The system uses EtherCAT protocol to achieve:
+- **Microsecond-level cycle times**: Required for deterministic real-time control
+- **Nanosecond-level synchronization jitter**: Critical for safety-critical engagement timing
+- **Deterministic timing (hard-real-time)**: TCP/IP cannot guarantee deterministic timing due to:
+  - Buffering delays
+  - Retry mechanisms
+  - Congestion control
+  - Variable routing paths
+  - Operating system scheduling delays
+
+EtherCAT bypasses the entire TCP/IP stack, embedding datagrams directly in Ethernet frames, enabling deterministic, hard real-time communication suitable for safety-critical air defence systems.
+
+#### 8.1.1.2 Implementation Approach
+- **Current Implementation**: UDP sockets are used as a **simplified emulation** of EtherCAT frames
+- **Frame Structure**: Messages are designed to be compatible with EtherCAT datagram format
+- **Future Migration**: The application-level interface allows for seamless migration to actual EtherCAT hardware
+- **Frame Design**: Custom EtherCAT-compatible frame structure (see Section 8.1.5)
 
 #### 8.1.2 Message Types
 The system shall support the following message types:
@@ -323,52 +352,154 @@ The system shall support the following message types:
 - **SAFETY_INTERLOCK** (Ada → C++): Safety violation notifications
 - **HEARTBEAT** (Bidirectional): Keep-alive messages
 
-#### 8.1.3 Message Format
-Messages shall be serialized in a binary format for efficiency:
+#### 8.1.3 EtherCAT Frame Structure
 
-**TargetAssignment Message:**
+EtherCAT frames embed datagrams directly in Ethernet frames. The system uses a custom frame structure compatible with EtherCAT datagrams, designed as an educated guess based on EtherCAT protocol principles:
+
+**EtherCAT Frame Layout:**
+```
+[Ethernet Header: 14 bytes]
+  [Destination MAC: 6 bytes]      - Target node MAC address
+  [Source MAC: 6 bytes]           - Source node MAC address
+  [EtherType: 2 bytes]            - 0x88A4 (EtherCAT protocol identifier)
+[EtherCAT Header: 2 bytes]
+  [Length: 11 bits]               - Datagram length in bytes (0-2047)
+  [Type: 1 bit]                   - 0 = datagram, 1 = mailbox
+  [Reserved: 4 bits]              - Reserved for future use
+[EtherCAT Datagram: variable length]
+  [SKYGUARDIS Message Payload]    - Application data (see Section 8.1.4)
+[Ethernet FCS: 4 bytes]           - Frame Check Sequence (CRC-32)
+[Padding: 0-46 bytes]             - To meet Ethernet minimum frame size (64 bytes)
+```
+
+**Total Frame Size:** 
+- Minimum: 64 bytes (Ethernet minimum frame size)
+- Maximum: 1518 bytes (Ethernet maximum frame size)
+- Typical SKYGUARDIS frame: 60-80 bytes (depending on message type)
+
+**Frame Design Rationale:**
+This frame structure is an **educated guess** based on EtherCAT protocol principles:
+- EtherCAT uses EtherType 0x88A4 to identify frames
+- Datagrams are embedded directly in Ethernet frames (bypassing TCP/IP)
+- Frame structure enables deterministic, hard real-time communication
+- Current implementation emulates this via UDP for development/testing
+
+#### 8.1.4 SKYGUARDIS Datagram Format
+
+The SKYGUARDIS application datagrams are embedded within EtherCAT frames:
+
+**TargetAssignment Datagram:**
 ```
 [MessageType: 1 byte][TargetID: 4 bytes][Range: 8 bytes][Azimuth: 8 bytes]
 [Elevation: 8 bytes][Velocity: 8 bytes][Priority: 1 byte][Checksum: 2 bytes]
-Total: 40 bytes
+Total: 40 bytes (datagram payload)
 ```
 
-**EngagementStatus Message:**
+**EngagementStatus Datagram:**
 ```
 [MessageType: 1 byte][TargetID: 4 bytes][State: 1 byte][Firing: 1 byte]
 [LeadAngle: 8 bytes][TimeToImpact: 8 bytes][Checksum: 2 bytes]
-Total: 25 bytes
+Total: 25 bytes (datagram payload)
 ```
 
-#### 8.1.4 Serialization Requirements
-- **Endianness**: Network byte order (big-endian)
-- **Floating Point**: IEEE 754 double precision
+**Complete EtherCAT Frame for TargetAssignment:**
+- Ethernet Header: 14 bytes
+- EtherCAT Header: 2 bytes
+- SKYGUARDIS Datagram: 40 bytes
+- Ethernet FCS: 4 bytes
+- **Total: 60 bytes** (padded to 64 bytes minimum if needed)
+
+#### 8.1.5 EtherCAT Frame Design Details
+
+**Frame Header Fields:**
+- **EtherType**: 0x88A4 (EtherCAT protocol identifier per IEEE 802.3)
+- **EtherCAT Length**: 11-bit field indicating datagram length in bytes (0-2047)
+- **EtherCAT Type**: 1-bit field (0 = datagram, 1 = mailbox)
+- **Reserved**: 4 bits reserved for future use
+
+**EtherCAT Header Bit Layout:**
+```
+Bit:  15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
+     [Reserved: 4 bits][Type: 1 bit][Length: 11 bits]
+```
+
+**Datagram Serialization Requirements:**
+- **Endianness**: Network byte order (big-endian) for all multi-byte fields
+- **Floating Point**: IEEE 754 double precision (8 bytes, network byte order)
 - **Integers**: Unsigned, network byte order
-- **Checksum**: Simple 16-bit checksum for integrity verification
+- **Checksum**: 16-bit checksum for datagram integrity verification
 - **Versioning**: Message format version in header (for future compatibility)
+- **Frame Padding**: Ethernet minimum frame size (64 bytes) must be met
+
+**Frame Timing Characteristics:**
+- **Cycle Time**: < 1 millisecond (microsecond-level) - EtherCAT capability
+- **Jitter**: < 100 nanoseconds (nanosecond-level) - EtherCAT capability
+- **Determinism**: Hard real-time guarantee (no buffering delays)
+- **Latency**: < 10 microseconds end-to-end (EtherCAT capability)
+- **Note**: Current UDP emulation achieves ~1-10ms latency (acceptable for development, not production)
+
+**Frame Emulation Approach:**
+The current implementation uses UDP sockets to **emulate** EtherCAT frames:
+- UDP datagrams simulate EtherCAT frames
+- Frame structure is designed to be compatible with actual EtherCAT hardware
+- Application-level interface abstracts frame construction/extraction
+- Future migration to real EtherCAT hardware requires only driver layer changes
+
+#### 8.1.6 Frame Emulation in Current Implementation
+
+**Note on Current Implementation:**
+The current codebase uses UDP sockets as a **simplified emulation** of EtherCAT frames for development and testing purposes. The frame structure and message format are designed to be compatible with EtherCAT datagrams:
+
+- **UDP Emulation**: UDP datagrams simulate EtherCAT frames
+- **Frame Abstraction**: Application code constructs/extracts datagrams as if they were EtherCAT frames
+- **Interface Design**: Clean interface allows future migration to real EtherCAT hardware
+- **Timing Emulation**: UDP timing (1-10ms) is acceptable for development but not production
+- **Frame Structure**: Messages are designed to fit within EtherCAT frame constraints
+- **Frame Structure**: Messages follow EtherCAT-compatible format
+- **Application Interface**: Same interface for both UDP emulation and future EtherCAT hardware
+- **Migration Path**: Seamless transition to actual EtherCAT hardware without application code changes
 
 ### 8.2 C++ Message Gateway Implementation
 
-#### 8.2.1 UDP Socket Management
-- **Socket Creation**: Create UDP socket on initialization
+#### 8.2.1 EtherCAT Frame Management (Currently Emulated via UDP)
+- **Frame Creation**: Create EtherCAT-compatible frames with proper headers
+- **Frame Serialization**: Embed SKYGUARDIS datagrams in EtherCAT frame format
+- **Frame Transmission**: Send frames via EtherCAT network (emulated via UDP in development)
+- **Frame Reception**: Receive and parse EtherCAT frames
+- **Error Handling**: Handle frame errors gracefully, log failures
+
+**Current Implementation (UDP Emulation):**
+- **Socket Creation**: Create UDP socket on initialization (simulates EtherCAT frame transmission)
 - **Socket Binding**: Bind to localhost, ephemeral port for C2 side
 - **Socket Options**: Set socket options for timeout and buffer sizes
-- **Error Handling**: Handle socket errors gracefully, log failures
+- **Frame Format**: Messages are formatted as EtherCAT-compatible datagrams (see EtherCAT Frame Design document)
+- **Future**: Replace UDP sockets with actual EtherCAT hardware interface
 
-#### 8.2.2 Message Sending
-- **Target Assignment Sending**:
-  - Serialize `TargetAssignment` struct to binary format
-  - Calculate checksum
-  - Send to gun control (localhost:8888)
-  - Handle send failures (log error, retry optional)
+**Frame Design Reference:**
+- See `docs/ethercat_frame_design.md` for complete EtherCAT frame structure specification
+- Frame structure includes: Ethernet header (14 bytes), EtherCAT header (2 bytes), SKYGUARDIS datagram (variable), Ethernet FCS (4 bytes)
+- Total frame size: Minimum 64 bytes (Ethernet minimum), maximum 1518 bytes
+
+#### 8.2.2 Frame Sending (EtherCAT Datagram Transmission)
+- **Target Assignment Frame Sending**:
+  - Serialize `TargetAssignment` struct to EtherCAT datagram format
+  - Construct EtherCAT frame header
+  - Embed datagram in Ethernet frame structure
+  - Calculate checksum for datagram
+  - Calculate Ethernet FCS for frame
+  - Transmit frame via EtherCAT network (emulated via UDP: localhost:8888)
+  - Handle transmission failures (log error, retry optional)
   - Return success/failure status
 
-#### 8.2.3 Message Receiving
-- **Engagement Status Receiving**:
-  - Listen on port 8889 for status messages
+#### 8.2.3 Frame Receiving (EtherCAT Datagram Reception)
+- **Engagement Status Frame Receiving**:
+  - Listen for EtherCAT frames (emulated via UDP port 8889)
   - Non-blocking receive with timeout (100ms)
-  - Deserialize binary data to `EngagementStatus` struct
-  - Validate checksum
+  - Parse EtherCAT frame header
+  - Extract SKYGUARDIS datagram from frame
+  - Deserialize datagram to `EngagementStatus` struct
+  - Validate datagram checksum
+  - Validate Ethernet FCS (if available)
   - Return status or empty status on timeout/error
 
 #### 8.2.4 Connection Management
@@ -379,26 +510,38 @@ Total: 25 bytes
 
 ### 8.3 Ada Message Handler Implementation
 
-#### 8.3.1 UDP Socket Management
-- **Socket Creation**: Use GNAT.Sockets package
-- **Socket Binding**: Bind to localhost:8888 for receiving
+#### 8.3.1 EtherCAT Frame Management (Currently Emulated via UDP)
+- **Frame Reception**: Receive EtherCAT frames (emulated via UDP sockets)
+- **Frame Parsing**: Parse EtherCAT frame headers and extract datagrams
+- **Socket Creation**: Use GNAT.Sockets package for UDP emulation
+- **Socket Binding**: Bind to localhost:8888 for receiving frames
 - **Socket Options**: Configure for non-blocking operation
 - **Error Handling**: Raise exceptions on critical errors, log warnings
 
-#### 8.3.2 Message Receiving
-- **Target Assignment Reception**:
-  - Receive UDP datagram on port 8888
-  - Deserialize binary data to Ada record type
-  - Validate checksum
+**Future Implementation:**
+- Replace UDP sockets with EtherCAT hardware interface
+- Direct frame access via EtherCAT driver
+- Hardware-level frame parsing
+
+#### 8.3.2 Frame Receiving (EtherCAT Datagram Reception)
+- **Target Assignment Frame Reception**:
+  - Receive EtherCAT frame (emulated via UDP datagram on port 8888)
+  - Parse EtherCAT frame header
+  - Extract SKYGUARDIS datagram from frame
+  - Deserialize datagram binary data to Ada record type
+  - Validate datagram checksum
   - Validate message format (type, size)
   - Return received assignment or indicate error
 
-#### 8.3.3 Message Sending
-- **Engagement Status Sending**:
-  - Serialize Ada record to binary format
-  - Calculate checksum
-  - Send to C2 node (localhost:8889)
-  - Handle send failures (log, continue operation)
+#### 8.3.3 Frame Sending (EtherCAT Datagram Transmission)
+- **Engagement Status Frame Sending**:
+  - Serialize Ada record to EtherCAT datagram format
+  - Construct EtherCAT frame header
+  - Embed datagram in Ethernet frame structure
+  - Calculate datagram checksum
+  - Calculate Ethernet FCS
+  - Transmit frame to C2 node (emulated via UDP: localhost:8889)
+  - Handle transmission failures (log, continue operation)
 
 #### 8.3.4 Integration with State Machine
 - **Message Reception Loop**: Periodic check for incoming messages (10 Hz)
@@ -408,27 +551,36 @@ Total: 25 bytes
 
 ### 8.4 Message Protocol Details
 
-#### 8.4.1 Target Assignment Protocol
+#### 8.4.1 Target Assignment Protocol (EtherCAT Frame Exchange)
 1. C2 evaluates threats and selects highest priority target
-2. C2 formats `TargetAssignment` message with target data
-3. C2 sends message via UDP to gun control
-4. Gun control receives and validates message
-5. Gun control acknowledges (implicit via state change or explicit ACK)
-6. Gun control begins engagement sequence
+2. C2 formats `TargetAssignment` datagram with target data
+3. C2 constructs EtherCAT frame with datagram payload
+4. C2 transmits EtherCAT frame to gun control (emulated via UDP)
+5. Gun control receives EtherCAT frame
+6. Gun control parses frame and extracts datagram
+7. Gun control validates datagram (checksum, format)
+8. Gun control acknowledges (implicit via state change or explicit ACK)
+9. Gun control begins engagement sequence
 
-#### 8.4.2 Engagement Status Protocol
+#### 8.4.2 Engagement Status Protocol (EtherCAT Frame Exchange)
 1. Gun control updates engagement state
-2. Gun control formats `EngagementStatus` message
-3. Gun control sends status to C2 (periodic or on state change)
-4. C2 receives and processes status
-5. C2 logs status and updates visualization
-6. C2 may assign new target based on status
+2. Gun control formats `EngagementStatus` datagram
+3. Gun control constructs EtherCAT frame with datagram payload
+4. Gun control transmits frame to C2 (periodic or on state change, emulated via UDP)
+5. C2 receives EtherCAT frame
+6. C2 parses frame and extracts datagram
+7. C2 validates and processes status
+8. C2 logs status and updates visualization
+9. C2 may assign new target based on status
 
 #### 8.4.3 Error Handling
-- **Invalid Message**: Log error, discard message, remain in safe state
-- **Checksum Mismatch**: Log error, discard message, request retransmission (optional)
-- **Socket Error**: Log error, attempt reconnection, default to safe state
-- **Timeout**: Handle gracefully, continue operation
+- **Invalid Frame**: Log error, discard frame, remain in safe state
+- **Invalid Datagram**: Log error, discard datagram, remain in safe state
+- **Checksum Mismatch**: Log error, discard frame/datagram, request retransmission (optional)
+- **FCS Error**: Log error, discard frame (Ethernet frame corruption)
+- **Frame Timeout**: Handle gracefully, continue operation
+- **Transmission Error**: Log error, attempt retransmission, default to safe state
+- **EtherCAT Network Error**: Log error, attempt recovery, default to safe state
 
 ---
 

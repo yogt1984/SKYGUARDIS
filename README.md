@@ -48,7 +48,7 @@ The C++ C2 node simulates:
 * Weapon assignment logic
 * Scenario orchestration & logging
 
-It communicates with the gun controller via a **clean message protocol** (UDP / IPC depending on build).
+It communicates with the gun controller via **EtherCAT protocol** — a real-time Ethernet protocol that bypasses TCP/IP to achieve deterministic, hard real-time communication with microsecond-level cycle times and nanosecond-level synchronization jitter.
 
 ---
 
@@ -79,7 +79,7 @@ Radar Simulator (C++)
 C2 Controller (C++)
         ↓ assignments
 Message Gateway (C++)
-        ↕ UDP / IPC
+        ↕ EtherCAT (Ethernet frames, bypassing TCP/IP)
 Gun Control Computer (Ada)
         ↓ status & results
 Logger / Visualizer (C++)
@@ -103,8 +103,48 @@ Logger / Visualizer (C++)
 ✔ Real-time control loop (Ada tasks)
 ✔ Strong typing for physical quantities
 ✔ Deterministic engagement behaviour
+✔ **EtherCAT protocol for hard real-time communication** (microsecond-level cycle times)
 ✔ Scenarios: single target / swarm / saturation
 ✔ Logging & inspectable execution trace
+
+### 🔌 **EtherCAT Protocol Assumption & Frame Design**
+
+This project assumes the use of **EtherCAT (Ethernet for Control Automation Technology)** protocol for inter-process communication. EtherCAT uses the Ethernet physical layer (IEEE 802.3) but **bypasses TCP/IP completely**, embedding lean real-time datagrams directly in Ethernet frames.
+
+**Why EtherCAT?**
+- ✔ **Microsecond-level cycle times** — Required for deterministic real-time control
+- ✔ **Nanosecond-level synchronization jitter** — Critical for safety-critical engagement timing
+- ✔ **Deterministic timing (hard-real-time)** — TCP/IP cannot guarantee deterministic timing due to:
+  - Buffering delays
+  - Retry mechanisms  
+  - Congestion control
+  - Variable routing paths
+  - Operating system scheduling delays
+
+EtherCAT avoids the entire TCP/IP stack, enabling deterministic, hard real-time communication suitable for safety-critical air defence systems.
+
+**Frame Design:**
+The system implements a custom EtherCAT-compatible frame structure as an **educated guess** based on EtherCAT protocol principles:
+
+```
+[Ethernet Header: 14 bytes]
+  [Destination MAC: 6 bytes]
+  [Source MAC: 6 bytes]  
+  [EtherType: 2 bytes] (0x88A4 for EtherCAT)
+[EtherCAT Header: 2 bytes]
+  [Length: 11 bits] (datagram length)
+  [Type: 1 bit] (0 = datagram)
+  [Reserved: 4 bits]
+[EtherCAT Datagram: variable length]
+  [SKYGUARDIS Message Payload]
+[Ethernet FCS: 4 bytes] (Frame Check Sequence)
+```
+
+**Implementation Note:**
+The current codebase uses **UDP sockets as a simplified emulation** of EtherCAT frames for development and testing. The frame structure and message format are designed to be compatible with EtherCAT datagrams, allowing future migration to actual EtherCAT hardware with minimal changes. The application-level interface abstracts frame construction/extraction, making the emulation transparent to the rest of the system.
+- ✔ **Deterministic timing (hard-real-time)** — TCP/IP cannot guarantee this due to buffering, retries, congestion control
+
+**Implementation Note:** The current codebase uses UDP sockets as a **simplified emulation** of EtherCAT frames. The frame structure and message format are designed to be compatible with EtherCAT datagrams, allowing for future migration to actual EtherCAT hardware while maintaining the same application-level interface.
 
 ---
 
