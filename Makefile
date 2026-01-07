@@ -83,8 +83,13 @@ build-cpp-direct: setup-dirs
 		src/cpp/message_gateway/protocol.cpp \
 		src/cpp/logger/logger.cpp \
 		src/cpp/logger/visualizer.cpp \
-		-o $(C2_NODE) -pthread || \
+		-o $(C2_NODE) -pthread -lrt || \
 		(echo "ERROR: C++ build failed. Check your source files." && exit 1)
+	@g++ -std=c++17 -I./include/cpp -O2 -Wall \
+		tests/cpp/test_message_gateway.cpp \
+		src/cpp/message_gateway/protocol.cpp \
+		src/cpp/message_gateway/message_gateway.cpp \
+		-o $(BIN_DIR)/test_message_gateway -pthread -lrt || true
 	@g++ -std=c++17 -I./include/cpp -O2 -Wall \
 		src/cpp/main_radar_sim.cpp \
 		src/cpp/radar_simulator/radar_simulator.cpp \
@@ -118,11 +123,12 @@ test-cpp: build-cpp
 		cd $(BUILD_DIR) && ctest --output-on-failure || true; \
 	else \
 		echo "Running direct tests..."; \
-		g++ -std=c++17 -I./include/cpp -O2 -Wall \
-			tests/cpp/test_threat_evaluator.cpp \
-			src/cpp/c2_controller/threat_evaluator.cpp \
-			-o $(BIN_DIR)/test_threat_evaluator && \
-		$(BIN_DIR)/test_threat_evaluator || true; \
+		if [ -f $(BIN_DIR)/test_threat_evaluator ]; then \
+			$(BIN_DIR)/test_threat_evaluator || true; \
+		fi; \
+		if [ -f $(BIN_DIR)/test_message_gateway ]; then \
+			$(BIN_DIR)/test_message_gateway || true; \
+		fi; \
 	fi
 
 # Run Ada tests

@@ -24,7 +24,16 @@ int main() {
     skyguardis::radar::RadarSimulator radar;
     skyguardis::c2::C2Controller c2;
     skyguardis::logger::Logger logger;
-    // skyguardis::gateway::MessageGateway gateway;  // Reserved for future use
+    skyguardis::gateway::MessageGateway gateway;
+    
+    // Initialize message gateway
+    if (!gateway.initialize(8888, 8889)) {
+        std::cerr << "[C2_NODE] Failed to initialize message gateway" << std::endl;
+        return 1;
+    }
+    
+    // Connect gateway to C2 controller
+    c2.setMessageGateway(&gateway);
     
     logger.log("C2 Node initialized");
     
@@ -43,12 +52,21 @@ int main() {
                       std::to_string(tracks.size()) + " tracks");
         }
         
+        // Check for engagement status updates
+        skyguardis::protocol::EngagementStatus status;
+        if (gateway.receiveEngagementStatus(status)) {
+            logger.log("Engagement status: Target=" + std::to_string(status.target_id) +
+                      " State=" + std::to_string(status.state) +
+                      " Firing=" + std::to_string(status.firing));
+        }
+        
         cycle++;
         if (cycle % 100 == 0) {
             logger.log("C2 Node running - cycle " + std::to_string(cycle));
         }
     }
     
+    gateway.shutdown();
     logger.log("C2 Node shutting down");
     std::cout << "[C2_NODE] Shutdown complete" << std::endl;
     return 0;

@@ -44,6 +44,9 @@ target_link_libraries(c2_node)
 target_link_libraries(radar_sim)
 target_link_libraries(logger)
 
+# Add pthread for socket operations
+target_link_libraries(c2_node pthread)
+
 # Tests
 enable_testing()
 add_subdirectory(tests/cpp)
