@@ -142,9 +142,6 @@ The system implements a custom EtherCAT-compatible frame structure as an **educa
 
 **Implementation Note:**
 The current codebase uses **UDP sockets as a simplified emulation** of EtherCAT frames for development and testing. The frame structure and message format are designed to be compatible with EtherCAT datagrams, allowing future migration to actual EtherCAT hardware with minimal changes. The application-level interface abstracts frame construction/extraction, making the emulation transparent to the rest of the system.
-- ✔ **Deterministic timing (hard-real-time)** — TCP/IP cannot guarantee this due to buffering, retries, congestion control
-
-**Implementation Note:** The current codebase uses UDP sockets as a **simplified emulation** of EtherCAT frames. The frame structure and message format are designed to be compatible with EtherCAT datagrams, allowing for future migration to actual EtherCAT hardware while maintaining the same application-level interface.
 
 ---
 
