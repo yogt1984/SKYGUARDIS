@@ -769,24 +769,32 @@ The system meets v1.0 requirements when:
 
 ---
 
-## 12. Acceptance Criteria
+## 12. Acceptance Criteria for v1.0
 
-The system meets v0.1 requirements when:
+The system meets v1.0 requirements when:
+
 1. ✅ Objects are emulated with realistic motion and radar output
 2. ✅ Azimuth and elevation are correctly calculated relative to radar
 3. ✅ System reacts to object position and motion
 4. ✅ Safety layers are implemented in Ada and enforced
-5. ✅ Ctrl+C gracefully shuts down both processes
-6. ✅ End-to-end engagement sequence works
-7. ✅ All safety interlocks prevent unsafe firing
-8. ✅ System handles errors gracefully
+5. ✅ Ctrl+C gracefully shuts down both C++ and Ada processes
+6. ✅ **C++ and Ada communicate via UDP messages**
+7. ✅ **C2 controller sends target assignments to gun control**
+8. ✅ **Gun control receives assignments and updates state machine**
+9. ✅ **Safety checks are integrated into engagement flow**
+10. ✅ **Ballistics calculations are used in engagement**
+11. ✅ **End-to-end engagement sequence works (object → radar → C2 → gun control → engagement)**
+12. ✅ **All safety interlocks prevent unsafe firing**
+13. ✅ System handles errors gracefully
 
 ---
 
-## Document Control
+## 13. Document Control
 
 - **Author**: System Requirements Team
-- **Review Status**: Pending
-- **Approval Status**: Draft
-- **Next Review**: TBD
+- **Review Status**: Final
+- **Approval Status**: Approved for Implementation
+- **Version**: 1.0
+- **Last Updated**: 2025-01-06
+- **Next Review**: After v1.0 implementation complete
 
