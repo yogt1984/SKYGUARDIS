@@ -42,8 +42,8 @@ int main() {
     while (running) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         
-        // Generate and process tracks
-        radar.generateTracks();
+        // Update and process tracks (with motion models)
+        radar.updateTracks();
         auto tracks = radar.getCurrentTracks();
         
         if (!tracks.empty()) {

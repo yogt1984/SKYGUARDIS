@@ -79,6 +79,7 @@ build-cpp-direct: setup-dirs
 		src/cpp/c2_controller/c2_controller.cpp \
 		src/cpp/c2_controller/threat_evaluator.cpp \
 		src/cpp/radar_simulator/radar_simulator.cpp \
+		src/cpp/radar_simulator/scenario_manager.cpp \
 		src/cpp/message_gateway/message_gateway.cpp \
 		src/cpp/message_gateway/protocol.cpp \
 		src/cpp/logger/logger.cpp \
@@ -95,6 +96,11 @@ build-cpp-direct: setup-dirs
 		src/cpp/message_gateway/protocol.cpp \
 		src/cpp/message_gateway/message_gateway.cpp \
 		-o $(BIN_DIR)/test_state_machine_integration -pthread -lrt || true
+	@g++ -std=c++17 -I./include/cpp -O2 -Wall \
+		tests/cpp/test_radar_simulation.cpp \
+		src/cpp/radar_simulator/radar_simulator.cpp \
+		src/cpp/radar_simulator/scenario_manager.cpp \
+		-o $(BIN_DIR)/test_radar_simulation -pthread -lrt || true
 	@g++ -std=c++17 -I./include/cpp -O2 -Wall \
 		src/cpp/main_radar_sim.cpp \
 		src/cpp/radar_simulator/radar_simulator.cpp \
@@ -136,6 +142,9 @@ test-cpp: build-cpp
 		fi; \
 		if [ -f $(BIN_DIR)/test_state_machine_integration ]; then \
 			$(BIN_DIR)/test_state_machine_integration || true; \
+		fi; \
+		if [ -f $(BIN_DIR)/test_radar_simulation ]; then \
+			$(BIN_DIR)/test_radar_simulation || true; \
 		fi; \
 	fi
 

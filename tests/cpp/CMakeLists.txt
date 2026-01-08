@@ -30,3 +30,13 @@ target_include_directories(test_state_machine_integration PRIVATE
 target_link_libraries(test_state_machine_integration pthread)
 add_test(NAME StateMachineIntegration COMMAND test_state_machine_integration)
 
+add_executable(test_radar_simulation
+    test_radar_simulation.cpp
+    ../../src/cpp/radar_simulator/radar_simulator.cpp
+    ../../src/cpp/radar_simulator/scenario_manager.cpp
+)
+target_include_directories(test_radar_simulation PRIVATE 
+    ${CMAKE_SOURCE_DIR}/include/cpp
+)
+add_test(NAME RadarSimulation COMMAND test_radar_simulation)
+

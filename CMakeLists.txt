@@ -15,6 +15,7 @@ set(C2_SOURCES
 
 set(RADAR_SOURCES
     src/cpp/radar_simulator/radar_simulator.cpp
+    src/cpp/radar_simulator/scenario_manager.cpp
 )
 
 set(MESSAGE_GATEWAY_SOURCES
