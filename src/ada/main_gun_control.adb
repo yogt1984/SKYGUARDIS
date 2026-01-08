@@ -1,42 +1,219 @@
 with Gun_Control.Engagement_State_Machine;
 with Safety_Kernel.Safety_Interlocks;
+with Ballistics.Ballistic_Calculator;
+with Message_Handler;
 with Ada.Text_IO;
 with Ada.Real_Time;
+with Ada.Calendar;
 
 procedure Main_Gun_Control is
    use Gun_Control.Engagement_State_Machine;
    use Safety_Kernel.Safety_Interlocks;
+   use Ballistics.Ballistic_Calculator;
    use Ada.Real_Time;
    
    Context : Engagement_Context;
+   Handler : Message_Handler.Message_Handler_Type;
    Cycle : Natural := 0;
    Period : constant Time_Span := Milliseconds (100);
    Next_Time : Time := Clock + Period;
+   Last_State : Engagement_State := Idle;
+   Projectile_Velocity : constant Velocity_Ms := 1000.0; -- m/s
 begin
    Ada.Text_IO.Put_Line ("[GUN_CTRL] SKYGUARDIS Gun Control Computer starting...");
    
+   -- Initialize components
    Initialize (Context);
+   
+   -- Initialize message handler
+   Message_Handler.Initialize (Handler, 8888);
+   if not Message_Handler.Is_Initialized (Handler) then
+      Ada.Text_IO.Put_Line ("[GUN_CTRL] ERROR: Failed to initialize message handler");
+      return;
+   end if;
+   
    Ada.Text_IO.Put_Line ("[GUN_CTRL] Gun Control Computer initialized");
    
    -- Main real-time control loop
    loop
-      -- Periodic control task
+      -- Check for incoming target assignments
       declare
-         Current_State : Engagement_State := Current_State (Context);
+         Assignment : Message_Handler.Target_Assignment_Message;
+         Received   : Boolean;
+         Success    : Boolean;
       begin
-         -- Process engagement state machine
-         if Current_State = Idle then
-            -- Wait for target assignment
-            null;
-         else
-            Ada.Text_IO.Put_Line ("[GUN_CTRL] Cycle" & Natural'Image (Cycle) & 
-                                 ": State=" & Engagement_State'Image (Current_State));
+         if Message_Handler.Receive_Target_Assignment (Handler, Assignment, Success) 
+            and then Success
+         then
+            -- Validate assignment
+            if Assignment.Range_M > 0.0 and Assignment.Range_M < 50_000.0 then
+               -- Store target data
+               Set_Target_Data (
+                  Context,
+                  Natural (Assignment.Target_ID),
+                  Assignment.Range_M,
+                  Assignment.Azimuth_Rad,
+                  Assignment.Elevation_Rad,
+                  Assignment.Velocity_Ms
+               );
+               
+               -- Trigger state machine if in Idle
+               if Current_State (Context) = Idle then
+                  Process_Command (
+                     Context,
+                     Start_Engagement,
+                     Assignment.Range_M,
+                     Assignment.Azimuth_Rad,
+                     Assignment.Elevation_Rad
+                  );
+                  Ada.Text_IO.Put_Line ("[GUN_CTRL] Target assigned: ID=" & 
+                                       Natural'Image (Natural (Assignment.Target_ID)) &
+                                       " Range=" & Float'Image (Assignment.Range_M) & "m");
+               end if;
+            end if;
+         end if;
+      end;
+      
+      -- Process engagement state machine
+      declare
+         Current_State_Val : Engagement_State := Current_State (Context);
+      begin
+         -- State progression logic
+         case Current_State_Val is
+            when Idle =>
+               -- Wait for target assignment (handled above)
+               null;
+               
+            when Acquiring =>
+               -- After acquisition period, transition to Tracking
+               declare
+                  Elapsed : Time_Span := Clock - Context.Last_Update_Time;
+               begin
+                  if Elapsed > Milliseconds (500) then  -- 500ms acquisition time
+                     Process_Command (Context, Continue_Tracking, 0.0, 0.0, 0.0);
+                  end if;
+               end;
+               
+            when Tracking =>
+               -- Calculate ballistics
+               declare
+                  Lead_Angle : Angle_Rad;
+                  Time_To_Impact : Time_S;
+                  Safety_Check : Safety_Status;
+               begin
+                  -- Continuous safety monitoring
+                  Safety_Check := Is_Safe_To_Fire (
+                     Angle_Rad (Get_Target_Azimuth (Context)),
+                     Elevation_Rad (Get_Target_Elevation (Context)),
+                     Range_M (Get_Target_Range (Context))
+                  );
+                  
+                  if Safety_Check /= Safe then
+                     -- Safety violation: abort
+                     Process_Command (Context, Abort, 0.0, 0.0, 0.0);
+                     Ada.Text_IO.Put_Line ("[GUN_CTRL] Safety violation detected - aborting engagement");
+                  else
+                     -- Calculate lead angle
+                     Lead_Angle := Calculate_Lead_Angle (
+                        Range_M (Get_Target_Range (Context)),
+                        Velocity_Ms (Get_Target_Velocity (Context)),
+                        Angle_Rad (0.0),  -- Simplified: assume heading
+                        Projectile_Velocity
+                     );
+                     
+                     -- Calculate time of flight
+                     Time_To_Impact := Calculate_Time_Of_Flight (
+                        Range_M (Get_Target_Range (Context)),
+                        Projectile_Velocity,
+                        Elevation_Rad (Get_Target_Elevation (Context))
+                     );
+                     
+                     -- Auto-fire after tracking period (simplified)
+                     declare
+                        Elapsed : Time_Span := Clock - Context.Last_Update_Time;
+                     begin
+                        if Elapsed > Milliseconds (1000) then  -- 1s tracking time
+                           Process_Command (Context, Fire, 0.0, 0.0, 0.0);
+                        end if;
+                     end;
+                  end if;
+               end;
+               
+            when Firing =>
+               -- Firing duration
+               declare
+                  Elapsed : Time_Span := Clock - Context.Last_Update_Time;
+               begin
+                  if Elapsed > Milliseconds (200) then  -- 200ms firing duration
+                     -- Automatic transition to Verifying
+                     null;  -- Handled by state machine
+                  end if;
+               end;
+               
+            when Verifying =>
+               -- Verification period
+               declare
+                  Elapsed : Time_Span := Clock - Context.Last_Update_Time;
+               begin
+                  if Elapsed > Milliseconds (500) then  -- 500ms verification
+                     -- Automatic transition to Complete
+                     null;  -- Handled by state machine
+                  end if;
+               end;
+               
+            when Complete =>
+               -- Return to Idle
+               null;  -- Handled by state machine
+         end case;
+         
+         -- Send status updates on state change
+         if Current_State_Val /= Last_State then
+            declare
+               Status : Message_Handler.Engagement_Status_Message;
+               Send_Success : Boolean;
+            begin
+               Status.Target_ID := Interfaces.Unsigned_32 (Get_Target_ID (Context));
+               Status.State := Engagement_State'Pos (Current_State_Val);
+               Status.Firing := (if Current_State_Val = Firing then 1 else 0);
+               
+               -- Calculate lead angle and time-to-impact for status
+               if Current_State_Val in Tracking .. Firing then
+                  declare
+                     Lead_Angle : Angle_Rad := Calculate_Lead_Angle (
+                        Range_M (Get_Target_Range (Context)),
+                        Velocity_Ms (Get_Target_Velocity (Context)),
+                        Angle_Rad (0.0),
+                        Projectile_Velocity
+                     );
+                     Time_To_Impact : Time_S := Calculate_Time_Of_Flight (
+                        Range_M (Get_Target_Range (Context)),
+                        Projectile_Velocity,
+                        Elevation_Rad (Get_Target_Elevation (Context))
+                     );
+                  begin
+                     Status.Lead_Angle_Rad := Float (Lead_Angle);
+                     Status.Time_To_Impact_S := Float (Time_To_Impact);
+                  end;
+               else
+                  Status.Lead_Angle_Rad := 0.0;
+                  Status.Time_To_Impact_S := 0.0;
+               end if;
+               
+               Message_Handler.Send_Engagement_Status (Handler, Status, Send_Success);
+               if Send_Success then
+                  Ada.Text_IO.Put_Line ("[GUN_CTRL] Status sent: State=" & 
+                                       Engagement_State'Image (Current_State_Val));
+               end if;
+               
+               Last_State := Current_State_Val;
+            end;
          end if;
       end;
       
       Cycle := Cycle + 1;
       if Cycle mod 100 = 0 then
-         Ada.Text_IO.Put_Line ("[GUN_CTRL] Running - cycle" & Natural'Image (Cycle));
+         Ada.Text_IO.Put_Line ("[GUN_CTRL] Running - cycle" & Natural'Image (Cycle) &
+                              " State=" & Engagement_State'Image (Current_State (Context)));
       end if;
       
       -- Wait until next period
@@ -45,6 +222,6 @@ begin
    end loop;
 exception
    when others =>
+      Message_Handler.Shutdown (Handler);
       Ada.Text_IO.Put_Line ("[GUN_CTRL] Shutdown complete");
 end Main_Gun_Control;
-
