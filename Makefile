@@ -91,6 +91,11 @@ build-cpp-direct: setup-dirs
 		src/cpp/message_gateway/message_gateway.cpp \
 		-o $(BIN_DIR)/test_message_gateway -pthread -lrt || true
 	@g++ -std=c++17 -I./include/cpp -O2 -Wall \
+		tests/cpp/test_state_machine_integration.cpp \
+		src/cpp/message_gateway/protocol.cpp \
+		src/cpp/message_gateway/message_gateway.cpp \
+		-o $(BIN_DIR)/test_state_machine_integration -pthread -lrt || true
+	@g++ -std=c++17 -I./include/cpp -O2 -Wall \
 		src/cpp/main_radar_sim.cpp \
 		src/cpp/radar_simulator/radar_simulator.cpp \
 		-o $(RADAR_SIM) || true
@@ -128,6 +133,9 @@ test-cpp: build-cpp
 		fi; \
 		if [ -f $(BIN_DIR)/test_message_gateway ]; then \
 			$(BIN_DIR)/test_message_gateway || true; \
+		fi; \
+		if [ -f $(BIN_DIR)/test_state_machine_integration ]; then \
+			$(BIN_DIR)/test_state_machine_integration || true; \
 		fi; \
 	fi
 

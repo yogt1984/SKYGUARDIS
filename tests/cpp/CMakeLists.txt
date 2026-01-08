@@ -19,3 +19,14 @@ target_include_directories(test_message_gateway PRIVATE
 target_link_libraries(test_message_gateway)
 add_test(NAME MessageGateway COMMAND test_message_gateway)
 
+add_executable(test_state_machine_integration
+    test_state_machine_integration.cpp
+    ../../src/cpp/message_gateway/protocol.cpp
+    ../../src/cpp/message_gateway/message_gateway.cpp
+)
+target_include_directories(test_state_machine_integration PRIVATE 
+    ${CMAKE_SOURCE_DIR}/include/cpp
+)
+target_link_libraries(test_state_machine_integration pthread)
+add_test(NAME StateMachineIntegration COMMAND test_state_machine_integration)
+
