@@ -84,6 +84,7 @@ build-cpp-direct: setup-dirs
 		src/cpp/message_gateway/protocol.cpp \
 		src/cpp/logger/logger.cpp \
 		src/cpp/logger/visualizer.cpp \
+		-pthread
 		-o $(C2_NODE) -pthread -lrt || \
 		(echo "ERROR: C++ build failed. Check your source files." && exit 1)
 	@g++ -std=c++17 -I./include/cpp -O2 -Wall \
@@ -101,6 +102,41 @@ build-cpp-direct: setup-dirs
 		src/cpp/radar_simulator/radar_simulator.cpp \
 		src/cpp/radar_simulator/scenario_manager.cpp \
 		-o $(BIN_DIR)/test_radar_simulation -pthread -lrt || true
+	@g++ -std=c++17 -I./include/cpp -O2 -Wall \
+		tests/cpp/test_logging.cpp \
+		src/cpp/logger/logger.cpp \
+		-o $(BIN_DIR)/test_logging -pthread -lrt || true
+	@g++ -std=c++17 -I./include/cpp -O2 -Wall \
+		tests/cpp/test_comprehensive_integration.cpp \
+		src/cpp/message_gateway/protocol.cpp \
+		src/cpp/message_gateway/message_gateway.cpp \
+		src/cpp/c2_controller/c2_controller.cpp \
+		src/cpp/c2_controller/threat_evaluator.cpp \
+		src/cpp/radar_simulator/radar_simulator.cpp \
+		src/cpp/radar_simulator/scenario_manager.cpp \
+		-o $(BIN_DIR)/test_comprehensive_integration -pthread -lrt || true
+	@g++ -std=c++17 -I./include/cpp -O2 -Wall \
+		tests/cpp/test_safety_comprehensive.cpp \
+		src/cpp/c2_controller/threat_evaluator.cpp \
+		-o $(BIN_DIR)/test_safety_comprehensive -pthread -lrt || true
+	@g++ -std=c++17 -I./include/cpp -O2 -Wall \
+		tests/cpp/test_ballistics_comprehensive.cpp \
+		-o $(BIN_DIR)/test_ballistics_comprehensive -pthread -lrt || true
+	@g++ -std=c++17 -I./include/cpp -O2 -Wall \
+		tests/cpp/test_comprehensive_integration.cpp \
+		src/cpp/message_gateway/protocol.cpp \
+		src/cpp/message_gateway/message_gateway.cpp \
+		src/cpp/c2_controller/threat_evaluator.cpp \
+		src/cpp/radar_simulator/radar_simulator.cpp \
+		src/cpp/radar_simulator/scenario_manager.cpp \
+		-o $(BIN_DIR)/test_comprehensive_integration -pthread -lrt || true
+	@g++ -std=c++17 -I./include/cpp -O2 -Wall \
+		tests/cpp/test_safety_comprehensive.cpp \
+		src/cpp/c2_controller/threat_evaluator.cpp \
+		-o $(BIN_DIR)/test_safety_comprehensive -pthread -lrt || true
+	@g++ -std=c++17 -I./include/cpp -O2 -Wall \
+		tests/cpp/test_ballistics_comprehensive.cpp \
+		-o $(BIN_DIR)/test_ballistics_comprehensive -pthread -lrt || true
 	@g++ -std=c++17 -I./include/cpp -O2 -Wall \
 		src/cpp/main_radar_sim.cpp \
 		src/cpp/radar_simulator/radar_simulator.cpp \
@@ -145,6 +181,27 @@ test-cpp: build-cpp
 		fi; \
 		if [ -f $(BIN_DIR)/test_radar_simulation ]; then \
 			$(BIN_DIR)/test_radar_simulation || true; \
+		fi; \
+		if [ -f $(BIN_DIR)/test_logging ]; then \
+			$(BIN_DIR)/test_logging || true; \
+		fi; \
+		if [ -f $(BIN_DIR)/test_comprehensive_integration ]; then \
+			$(BIN_DIR)/test_comprehensive_integration || true; \
+		fi; \
+		if [ -f $(BIN_DIR)/test_safety_comprehensive ]; then \
+			$(BIN_DIR)/test_safety_comprehensive || true; \
+		fi; \
+		if [ -f $(BIN_DIR)/test_ballistics_comprehensive ]; then \
+			$(BIN_DIR)/test_ballistics_comprehensive || true; \
+		fi; \
+		if [ -f $(BIN_DIR)/test_comprehensive_integration ]; then \
+			$(BIN_DIR)/test_comprehensive_integration || true; \
+		fi; \
+		if [ -f $(BIN_DIR)/test_safety_comprehensive ]; then \
+			$(BIN_DIR)/test_safety_comprehensive || true; \
+		fi; \
+		if [ -f $(BIN_DIR)/test_ballistics_comprehensive ]; then \
+			$(BIN_DIR)/test_ballistics_comprehensive || true; \
 		fi; \
 	fi
 

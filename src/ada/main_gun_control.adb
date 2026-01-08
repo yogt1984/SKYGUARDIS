@@ -4,13 +4,16 @@ with Ballistics.Ballistic_Calculator;
 with Message_Handler;
 with Ada.Text_IO;
 with Ada.Real_Time;
-with Ada.Calendar;
+with Interfaces;
+with Ada.Task_Identification;
+with System;
 
 procedure Main_Gun_Control is
    use Gun_Control.Engagement_State_Machine;
    use Safety_Kernel.Safety_Interlocks;
    use Ballistics.Ballistic_Calculator;
    use Ada.Real_Time;
+   use Interfaces;
    
    Context : Engagement_Context;
    Handler : Message_Handler.Message_Handler_Type;
@@ -19,8 +22,67 @@ procedure Main_Gun_Control is
    Next_Time : Time := Clock + Period;
    Last_State : Engagement_State := Idle;
    Projectile_Velocity : constant Velocity_Ms := 1000.0; -- m/s
+   
+   -- Graceful shutdown flag
+   Shutdown_Requested : Boolean := False;
+   pragma Atomic (Shutdown_Requested);
+   
+   -- Signal handling task with improved error handling
+   task Signal_Handler is
+      entry Shutdown;
+      entry Check_Shutdown (Requested : out Boolean);
+   end Signal_Handler;
+   
+   task body Signal_Handler is
+      use Ada.Task_Identification;
+      Check_Interval : constant Time_Span := Milliseconds (100);
+      Last_Check : Time := Clock;
+   begin
+      -- Check for shutdown file or signal
+      loop
+         delay until Last_Check + Check_Interval;
+         Last_Check := Clock;
+         
+         -- Check for stop file (simple mechanism)
+         declare
+            Stop_File : Ada.Text_IO.File_Type;
+         begin
+            Ada.Text_IO.Open (Stop_File, Ada.Text_IO.In_File, "/tmp/skyguardis_stop");
+            Ada.Text_IO.Close (Stop_File);
+            Ada.Text_IO.Put_Line ("[GUN_CTRL] Shutdown requested via stop file");
+            Shutdown_Requested := True;
+            exit;
+         exception
+            when Ada.Text_IO.Name_Error =>
+               null; -- File doesn't exist, continue
+            when others =>
+               null;
+         end;
+         
+         -- Exit if shutdown requested via entry call
+         select
+            accept Shutdown do
+               Ada.Text_IO.Put_Line ("[GUN_CTRL] Shutdown requested via entry call");
+               Shutdown_Requested := True;
+            end Shutdown;
+            exit;
+         or
+            accept Check_Shutdown (Requested : out Boolean) do
+               Requested := Shutdown_Requested;
+            end Check_Shutdown;
+         or
+            delay 0.0;
+         end select;
+      end loop;
+   exception
+      when others =>
+         Ada.Text_IO.Put_Line ("[GUN_CTRL] Signal handler error, requesting shutdown");
+         Shutdown_Requested := True;
+   end Signal_Handler;
+   
 begin
    Ada.Text_IO.Put_Line ("[GUN_CTRL] SKYGUARDIS Gun Control Computer starting...");
+   Ada.Text_IO.Put_Line ("[GUN_CTRL] Press Ctrl+C or create /tmp/skyguardis_stop to shutdown gracefully");
    
    -- Initialize components
    Initialize (Context);
@@ -35,7 +97,14 @@ begin
    Ada.Text_IO.Put_Line ("[GUN_CTRL] Gun Control Computer initialized");
    
    -- Main real-time control loop
+   Main_Loop:
    loop
+      -- Check for shutdown request
+      if Shutdown_Requested then
+         Ada.Text_IO.Put_Line ("[GUN_CTRL] Shutdown requested, cleaning up...");
+         exit Main_Loop;
+      end if;
+      
       -- Check for incoming target assignments
       declare
          Assignment : Message_Handler.Target_Assignment_Message;
@@ -72,6 +141,9 @@ begin
                end if;
             end if;
          end if;
+      exception
+         when others =>
+            null; -- Continue on error
       end;
       
       -- Process engagement state machine
@@ -206,8 +278,14 @@ begin
                end if;
                
                Last_State := Current_State_Val;
+            exception
+               when others =>
+                  null; -- Continue on error
             end;
          end if;
+      exception
+         when others =>
+            null; -- Continue on error
       end;
       
       Cycle := Cycle + 1;
@@ -219,9 +297,15 @@ begin
       -- Wait until next period
       delay until Next_Time;
       Next_Time := Next_Time + Period;
-   end loop;
+   end loop Main_Loop;
+   
+   -- Cleanup
+   Message_Handler.Shutdown (Handler);
+   Signal_Handler.Shutdown;
+   Ada.Text_IO.Put_Line ("[GUN_CTRL] Shutdown complete");
 exception
    when others =>
       Message_Handler.Shutdown (Handler);
-      Ada.Text_IO.Put_Line ("[GUN_CTRL] Shutdown complete");
+      Signal_Handler.Shutdown;
+      Ada.Text_IO.Put_Line ("[GUN_CTRL] Shutdown complete (exception)");
 end Main_Gun_Control;

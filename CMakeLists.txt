@@ -28,11 +28,18 @@ set(LOGGER_SOURCES
     src/cpp/logger/visualizer.cpp
 )
 
+set(SCENARIO_SOURCES
+    src/cpp/radar_simulator/scenario_manager.cpp
+)
+
 # Executables
 add_executable(c2_node 
     src/cpp/main_c2_node.cpp
     ${C2_SOURCES} 
+    ${RADAR_SOURCES}
+    ${SCENARIO_SOURCES}
     ${MESSAGE_GATEWAY_SOURCES}
+    ${LOGGER_SOURCES}
 )
 add_executable(radar_sim 
     src/cpp/main_radar_sim.cpp
@@ -45,8 +52,9 @@ target_link_libraries(c2_node)
 target_link_libraries(radar_sim)
 target_link_libraries(logger)
 
-# Add pthread for socket operations
+# Add pthread for socket operations and logging
 target_link_libraries(c2_node pthread)
+target_link_libraries(c2_node rt)
 
 # Tests
 enable_testing()

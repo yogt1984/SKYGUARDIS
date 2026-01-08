@@ -28,9 +28,11 @@ int main() {
     
     // Initialize message gateway
     if (!gateway.initialize(8888, 8889)) {
+        logger.error("Failed to initialize message gateway");
         std::cerr << "[C2_NODE] Failed to initialize message gateway" << std::endl;
         return 1;
     }
+    logger.info("Message gateway initialized successfully");
     
     // Connect gateway to C2 controller
     c2.setMessageGateway(&gateway);
@@ -67,7 +69,7 @@ int main() {
     }
     
     gateway.shutdown();
-    logger.log("C2 Node shutting down");
+    logger.info("C2 Node shutting down gracefully");
     std::cout << "[C2_NODE] Shutdown complete" << std::endl;
     return 0;
 }
