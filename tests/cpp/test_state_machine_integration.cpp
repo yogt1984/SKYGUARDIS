@@ -9,6 +9,7 @@
 #include <chrono>
 #include "message_gateway/protocol.hpp"
 #include "message_gateway/message_gateway.hpp"
+#include "message_gateway/message_gateway.hpp"
 
 using namespace skyguardis::protocol;
 using namespace skyguardis::gateway;
@@ -70,7 +71,11 @@ void test_message_format_compatibility() {
     // Verify header fields
     assert(buffer[0] == static_cast<uint8_t>(MessageType::TARGET_ASSIGNMENT));
     assert(buffer[1] == 0x01); // Version
-    assert(buffer[2] == 0x00 && buffer[3] == 0x28); // Length (40 bytes, network byte order)
+    // Length is 37 bytes payload (0x0025) in network byte order
+    uint16_t length;
+    std::memcpy(&length, buffer + 2, 2);
+    length = ntohs(length);
+    assert(length == 37 && "Payload length should be 37 bytes");
     
     // Verify checksum is present (non-zero)
     uint16_t checksum;

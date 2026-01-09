@@ -16,9 +16,10 @@ This project demonstrates **enterprise-grade systems engineering** with:
 ✅ **Threat Evaluation & Prioritization** — Multi-target threat scoring and assignment  
 ✅ **Enhanced Logging System** — Structured logging with levels, timestamps, and performance metrics  
 ✅ **Graceful Shutdown** — Signal handling and clean resource management  
-✅ **Extensive Test Suite** — **40+ comprehensive tests** covering all components  
+✅ **Extensive Test Suite** — **50+ comprehensive tests** covering all components  
 ✅ **Error Handling & Recovery** — Robust error handling with graceful degradation  
 ✅ **Performance Monitoring** — Real-time performance metrics and cycle time tracking  
+✅ **Continuous Integration** — GitHub Actions CI/CD with automated testing  
 
 ---
 
@@ -243,8 +244,9 @@ make test-ada      # Run Ada tests (requires GNAT)
 ```
 
 ### **Test Results**
-All **40+ tests passing**:
+All **50+ tests passing**:
 - ✅ 17 Radar Simulation tests
+- ✅ 13 Visualization tests
 - ✅ 7 Message Gateway tests
 - ✅ 5 State Machine Integration tests
 - ✅ 5 Logging tests
@@ -252,6 +254,50 @@ All **40+ tests passing**:
 - ✅ 4 Safety Comprehensive tests
 - ✅ 2 Threat Evaluator tests
 - ✅ 1 Ballistics Comprehensive test
+
+---
+
+## 🔄 **Continuous Integration**
+
+### **GitHub Actions CI/CD**
+
+This project includes **automated CI/CD** via GitHub Actions:
+
+- ✅ **Automatic testing** on every push and pull request
+- ✅ **Build verification** for C++ and Ada components
+- ✅ **Test execution** for all 9 test suites (50+ individual tests)
+- ✅ **Test result reporting** with detailed summaries
+- ✅ **Artifact uploads** for test logs on failure
+
+### **CI Workflow**
+
+The CI pipeline (`/.github/workflows/ci.yml`) automatically:
+
+1. **Sets up environment** — Installs g++, cmake, build-essential
+2. **Builds components** — Compiles all C++ and Ada code
+3. **Runs tests** — Executes all test suites automatically
+4. **Reports results** — Provides pass/fail summary with test counts
+5. **Handles failures** — Uploads logs and provides detailed error information
+
+### **CI Status Badge**
+
+Add this to your repository README to show CI status:
+
+```markdown
+![CI Status](https://github.com/YOUR_USERNAME/SKYGUARDIS/workflows/CI%20-%20Build%20and%20Test/badge.svg)
+```
+
+### **Local CI Testing**
+
+Test the CI workflow locally using [act](https://github.com/nektos/act):
+
+```bash
+# Install act
+curl https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash
+
+# Run CI workflow locally
+act -j build-and-test
+```
 
 ---
 

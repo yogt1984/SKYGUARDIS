@@ -1,0 +1,151 @@
+name: CI - Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  build-and-test:
+    name: Build and Test (C++ & Ada)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up C++ build environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          g++ \
+          libc6-dev \
+          pkg-config
+    
+    - name: Set up Ada build environment (optional)
+      continue-on-error: true
+      run: |
+        sudo apt-get install -y gnat || echo "GNAT not available, skipping Ada build"
+    
+    - name: Create necessary directories
+      run: |
+        mkdir -p build/bin
+        mkdir -p logs
+    
+    - name: Build C++ components
+      run: |
+        echo "Building C++ components..."
+        make build-cpp
+    
+    - name: Build Ada components (optional)
+      continue-on-error: true
+      run: |
+        if command -v gnatmake &> /dev/null; then
+          echo "Building Ada components..."
+          make build-ada
+        else
+          echo "GNAT not available, skipping Ada build"
+        fi
+    
+    - name: List built test executables
+      run: |
+        echo "=== Built Test Executables ==="
+        find build -name "test_*" -type f -executable | sort
+        echo ""
+        echo "=== Test Count ==="
+        find build -name "test_*" -type f -executable | wc -l
+    
+    - name: Run C++ tests
+      id: run_tests
+      run: |
+        echo "=== Running C++ Tests ==="
+        set +e  # Don't exit on first failure
+        
+        TEST_COUNT=0
+        PASSED_COUNT=0
+        FAILED_COUNT=0
+        FAILED_TESTS=""
+        
+        for test in $(find build -name "test_*" -type f -executable | sort); do
+          TEST_COUNT=$((TEST_COUNT + 1))
+          TEST_NAME=$(basename "$test")
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Running: $TEST_NAME"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          
+          if "$test" 2>&1 | tee /tmp/test_output.log; then
+            if grep -q "All.*tests passed\|✓ All\|passed!" /tmp/test_output.log; then
+              echo "✅ $TEST_NAME - PASSED"
+              PASSED_COUNT=$((PASSED_COUNT + 1))
+            else
+              echo "❌ $TEST_NAME - FAILED (no success message found)"
+              FAILED_COUNT=$((FAILED_COUNT + 1))
+              FAILED_TESTS="$FAILED_TESTS $TEST_NAME"
+            fi
+          else
+            echo "❌ $TEST_NAME - FAILED (exit code: $?)"
+            FAILED_COUNT=$((FAILED_COUNT + 1))
+            FAILED_TESTS="$FAILED_TESTS $TEST_NAME"
+          fi
+        done
+        
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "=== TEST SUMMARY ==="
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "Total Tests: $TEST_COUNT"
+        echo "Passed: $PASSED_COUNT"
+        echo "Failed: $FAILED_COUNT"
+        
+        if [ $FAILED_COUNT -gt 0 ]; then
+          echo ""
+          echo "Failed Tests:"
+          for test in $FAILED_TESTS; do
+            echo "  - $test"
+          done
+          echo ""
+          echo "::error::Some tests failed. Check the logs above for details."
+          exit 1
+        else
+          echo ""
+          echo "✅ All tests passed!"
+          echo "::notice::All $PASSED_COUNT tests passed successfully!"
+        fi
+        
+        # Set output for summary
+        echo "test_count=$TEST_COUNT" >> $GITHUB_OUTPUT
+        echo "passed_count=$PASSED_COUNT" >> $GITHUB_OUTPUT
+        echo "failed_count=$FAILED_COUNT" >> $GITHUB_OUTPUT
+    
+    - name: Test Summary
+      if: always()
+      run: |
+        echo "## 🧪 Test Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Metric | Count |" >> $GITHUB_STEP_SUMMARY
+        echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Total Tests | ${{ steps.run_tests.outputs.test_count }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| ✅ Passed | ${{ steps.run_tests.outputs.passed_count }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| ❌ Failed | ${{ steps.run_tests.outputs.failed_count }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ steps.run_tests.outputs.failed_count }}" == "0" ]; then
+          echo "### ✅ All tests passed!" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### ❌ Some tests failed. Please check the logs." >> $GITHUB_STEP_SUMMARY
+        fi
+    
+    - name: Upload test logs (on failure)
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-logs
+        path: |
+          logs/
+          /tmp/test_output.log
+        retention-days: 7
+
