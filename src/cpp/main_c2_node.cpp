@@ -2,6 +2,7 @@
 #include "radar_simulator/radar_simulator.hpp"
 #include "message_gateway/message_gateway.hpp"
 #include "logger/logger.hpp"
+#include "logger/visualizer.hpp"
 #include <iostream>
 #include <chrono>
 #include <thread>
@@ -24,6 +25,7 @@ int main() {
     skyguardis::radar::RadarSimulator radar;
     skyguardis::c2::C2Controller c2;
     skyguardis::logger::Logger logger;
+    skyguardis::logger::Visualizer visualizer;
     skyguardis::gateway::MessageGateway gateway;
     
     // Initialize message gateway

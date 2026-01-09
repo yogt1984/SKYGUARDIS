@@ -49,6 +49,15 @@ target_include_directories(test_logging PRIVATE
 )
 add_test(NAME Logging COMMAND test_logging)
 
+add_executable(test_visualization
+    test_visualization.cpp
+    ../../src/cpp/logger/visualizer.cpp
+)
+target_include_directories(test_visualization PRIVATE 
+    ${CMAKE_SOURCE_DIR}/include/cpp
+)
+add_test(NAME Visualization COMMAND test_visualization)
+
 add_executable(test_comprehensive_integration
     test_comprehensive_integration.cpp
     ../../src/cpp/message_gateway/protocol.cpp
